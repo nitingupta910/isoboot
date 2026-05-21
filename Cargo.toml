@@ -5,6 +5,18 @@ edition = "2021"
 description = "Multi-boot USB for Linux ISOs — no bundled binaries, no custom kernel modules."
 license = "MIT"
 rust-version = "1.74"
+readme = "README.md"
+repository = "https://github.com/nitingupta910/isoboot"
+homepage = "https://github.com/nitingupta910/isoboot"
+keywords = ["usb", "iso", "boot", "grub", "ventoy"]
+categories = ["command-line-utilities", "filesystem"]
+include = [
+    "src/**/*",
+    "assets/**/*",
+    "Cargo.toml",
+    "README.md",
+    "LICENSE",
+]
 
 [dependencies]
 anyhow = "1"
