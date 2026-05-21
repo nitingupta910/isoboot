@@ -140,6 +140,26 @@ A `tests/e2e/install-sudo-helper.sh` script optionally drops a narrow
 NOPASSWD sudoers entry so CI / automation can run the test
 non-interactively.
 
+### ISO cache location
+
+`--multi` downloads ~4 GB of ISOs. To avoid re-downloading and to share
+the cache across machines, point the test at any directory you control:
+
+```sh
+# One-shot
+sudo tests/e2e/run.sh --multi --cache-dir /mnt/nas/isos
+
+# Or persistently — survives the sudo wrapper because the installer
+# adds `env_keep += "ISOBOOT_ISO_CACHE"` to the sudoers entry.
+export ISOBOOT_ISO_CACHE=/mnt/nas/isos
+sudo -n /usr/local/sbin/isoboot-e2e --multi
+```
+
+Cache files are keyed by the URL's basename (e.g.
+`alpine-virt-3.23.0-x86_64.iso`), so if you already have a stash of
+upstream ISOs you can just drop them into the cache dir and they'll be
+picked up — no rename needed.
+
 ## License
 
 MIT.

@@ -37,6 +37,9 @@ cat > "$SUDOERS" <<EOF
 # /home/$USER_NAME/src/isoboot/tests/e2e/run.sh (and scripts it invokes).
 # Remove with: sudo rm $SUDOERS $DEST
 $USER_NAME ALL=(root) NOPASSWD: $DEST
+# Preserve ISOBOOT_ISO_CACHE so users can point the e2e test at a shared
+# ISO cache (e.g. on a NAS) without having to pass --cache-dir each time.
+Defaults!$DEST env_keep += "ISOBOOT_ISO_CACHE"
 EOF
 chmod 0440 "$SUDOERS"
 

@@ -26,7 +26,7 @@ TIMEOUT=45
 KEEP=0
 IMAGE_MB=512
 SENTINEL="ISOBOOT_E2E_OK"
-CACHE_DIR="/var/cache/isoboot-test"
+CACHE_DIR="${ISOBOOT_ISO_CACHE:-/var/cache/isoboot-test}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -131,18 +131,32 @@ case "$MODE" in
         EXPECT="Linux version"   # generic kernel banner; works for ~any distro
         ;;
     multi)
-        mkdir -p "$CACHE_DIR"
+        mkdir -p "$CACHE_DIR" 2>/dev/null || true
+        if [[ ! -d "$CACHE_DIR" || ! -w "$CACHE_DIR" ]]; then
+            echo "error: cache dir not writable: $CACHE_DIR" >&2
+            echo "       override with --cache-dir PATH or env ISOBOOT_ISO_CACHE=PATH" >&2
+            exit 1
+        fi
 
         URL_alpine="https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86_64/alpine-virt-3.23.0-x86_64.iso"
         URL_ubuntu="https://releases.ubuntu.com/26.04/ubuntu-26.04-live-server-amd64.iso"
         URL_fedora="https://download.fedoraproject.org/pub/fedora/linux/releases/43/Server/x86_64/iso/Fedora-Server-netinst-x86_64-43-1.6.iso"
 
+        # Cache keys are the URL's basename so users can pre-stage ISOs in the
+        # cache dir with their canonical upstream filenames and have them picked
+        # up automatically — no rename needed.
+        CACHE_alpine="${URL_alpine##*/}"
+        CACHE_ubuntu="${URL_ubuntu##*/}"
+        CACHE_fedora="${URL_fedora##*/}"
+
         download_one() {
             local name="$1"
             local url="$2"
-            local target="$CACHE_DIR/$name.iso"
+            local cache_name="$3"
+            local target="$CACHE_DIR/$cache_name"
             if [[ -s "$target" ]]; then
-                echo "  [cache] $name: $(numfmt --to=iec --suffix=B $(stat -c%s "$target"))"
+                local sz; sz=$(stat -c%s "$target")
+                echo "  [cache] $name: $cache_name ($(numfmt --to=iec --suffix=B "$sz"))"
                 return 0
             fi
             echo "  [fetch] $name: $url"
@@ -150,22 +164,24 @@ case "$MODE" in
                  -o "$target.part" "$url" && mv "$target.part" "$target"
         }
 
-        echo ">>> downloading 3 ISOs in parallel (cache: $CACHE_DIR)"
-        download_one alpine "$URL_alpine" &
+        echo ">>> resolving ISOs (cache: $CACHE_DIR)"
+        download_one alpine "$URL_alpine" "$CACHE_alpine" &
         PID_a=$!
-        download_one ubuntu "$URL_ubuntu" &
+        download_one ubuntu "$URL_ubuntu" "$CACHE_ubuntu" &
         PID_u=$!
-        download_one fedora "$URL_fedora" &
+        download_one fedora "$URL_fedora" "$CACHE_fedora" &
         PID_f=$!
 
         wait $PID_a || { echo "alpine download failed" >&2; exit 1; }
         wait $PID_u || { echo "ubuntu download failed" >&2; exit 1; }
         wait $PID_f || { echo "fedora download failed" >&2; exit 1; }
 
+        # On the USB itself we use short stable names so multi-test-grub.cfg
+        # can hardcode them; the cache uses the URL-derived names.
         echo ">>> copying ISOs onto data partition"
-        cp "$CACHE_DIR/alpine.iso" "$MNT_DATA/isos/alpine.iso"
-        cp "$CACHE_DIR/ubuntu.iso" "$MNT_DATA/isos/ubuntu.iso"
-        cp "$CACHE_DIR/fedora.iso" "$MNT_DATA/isos/fedora.iso"
+        cp "$CACHE_DIR/$CACHE_alpine" "$MNT_DATA/isos/alpine.iso"
+        cp "$CACHE_DIR/$CACHE_ubuntu" "$MNT_DATA/isos/ubuntu.iso"
+        cp "$CACHE_DIR/$CACHE_fedora" "$MNT_DATA/isos/fedora.iso"
 
         # Swap in the test-tuned grub.cfg (per-distro entries with
         # console=ttyS0 baked into kernel args).
