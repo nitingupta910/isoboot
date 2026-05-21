@@ -1,6 +1,6 @@
 [package]
 name = "isoboot"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Multi-boot USB for Linux ISOs — no bundled binaries, no custom kernel modules."
 license = "MIT"

@@ -23,7 +23,12 @@ impl Runner {
             .status()
             .with_context(|| format!("spawning `{}`", cmd))?;
         if !status.success() {
-            bail!("`{}` failed (exit {:?})", cmd, status.code());
+            bail!(
+                "command failed (exit {:?}): {} {}",
+                status.code(),
+                cmd,
+                args.join(" ")
+            );
         }
         Ok(())
     }

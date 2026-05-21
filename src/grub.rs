@@ -4,8 +4,7 @@ use std::path::Path;
 
 const GRUB_CFG: &str = include_str!("../assets/grub.cfg");
 
-const MARKER_BODY: &str =
-    "This file marks the isoboot data partition.\n\
+const MARKER_BODY: &str = "This file marks the isoboot data partition.\n\
      Drop Linux distro *.iso files into this directory and reboot.\n";
 
 pub fn install_grub_efi(runner: &Runner, efi_mp: &Path) -> Result<()> {
@@ -30,12 +29,7 @@ pub fn install_grub_bios(runner: &Runner, efi_mp: &Path, device: &Path) -> Resul
     let dev_str = device.to_string_lossy().into_owned();
     runner.run(
         "grub-install",
-        &[
-            "--target=i386-pc",
-            "--recheck",
-            &boot_arg,
-            &dev_str,
-        ],
+        &["--target=i386-pc", "--recheck", &boot_arg, &dev_str],
     )?;
     Ok(())
 }

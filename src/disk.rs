@@ -34,16 +34,15 @@ pub fn enumerate() -> Result<Vec<BlockDevice>> {
     if !out.status.success() {
         bail!("lsblk failed: {}", String::from_utf8_lossy(&out.stderr));
     }
-    let parsed: LsblkOutput =
-        serde_json::from_slice(&out.stdout).context("parsing lsblk JSON")?;
+    let parsed: LsblkOutput = serde_json::from_slice(&out.stdout).context("parsing lsblk JSON")?;
     Ok(parsed.blockdevices)
 }
 
 pub fn list_candidates() -> Result<()> {
     let devs = enumerate()?;
     println!(
-        "{:<14} {:<8} {:<4} {:<6} {:<22} {}",
-        "DEVICE", "SIZE", "RM", "TRAN", "MODEL", "SERIAL"
+        "{:<14} {:<8} {:<4} {:<6} {:<22} SERIAL",
+        "DEVICE", "SIZE", "RM", "TRAN", "MODEL"
     );
     for d in devs.iter().filter(|d| d.kind.as_deref() == Some("disk")) {
         println!(
@@ -94,7 +93,10 @@ mod tests {
 
     #[test]
     fn sata_style() {
-        assert_eq!(partition_path(Path::new("/dev/sdb"), 2).to_str(), Some("/dev/sdb2"));
+        assert_eq!(
+            partition_path(Path::new("/dev/sdb"), 2).to_str(),
+            Some("/dev/sdb2")
+        );
     }
 
     #[test]

@@ -31,14 +31,21 @@ pub fn install(args: &InstallArgs) -> Result<()> {
     let devs = disk::enumerate()?;
     let dev = disk::lookup(&devs, &args.device)?;
 
-    let is_loop = dev.kind.as_deref() == Some("loop");
-    match dev.kind.as_deref() {
-        Some("disk") => {}
+    let is_loop = match dev.kind.as_deref() {
+        Some("disk") => false,
         Some("loop") => {
-            eprintln!("note: {} is a loop device (test/QEMU image install)", args.device.display());
+            eprintln!(
+                "note: {} is a loop device (test/QEMU image install)",
+                args.device.display()
+            );
+            true
         }
-        other => bail!("{} has unexpected lsblk type {:?}", args.device.display(), other),
-    }
+        other => bail!(
+            "{} has unexpected lsblk type {:?}",
+            args.device.display(),
+            other
+        ),
+    };
     let removable = dev.rm.unwrap_or(false) || is_loop;
     if !removable && !args.allow_internal {
         bail!(
@@ -67,7 +74,10 @@ pub fn install(args: &InstallArgs) -> Result<()> {
 
     runner.run("wipefs", &["-a", &dev_str])?;
     runner.run("parted", &["-s", &dev_str, "mklabel", "gpt"])?;
-    runner.run("parted", &["-s", &dev_str, "mkpart", "bios_boot", "1MiB", "3MiB"])?;
+    runner.run(
+        "parted",
+        &["-s", &dev_str, "mkpart", "bios_boot", "1MiB", "3MiB"],
+    )?;
     runner.run("parted", &["-s", &dev_str, "set", "1", "bios_grub", "on"])?;
     runner.run(
         "parted",
@@ -78,6 +88,10 @@ pub fn install(args: &InstallArgs) -> Result<()> {
         "parted",
         &["-s", &dev_str, "mkpart", "DATA", &esp_end, "100%"],
     )?;
+    // Re-read the partition table so partition device nodes exist before
+    // we try to format them. partprobe may not be installed everywhere, so
+    // ignore failure and fall back to udevadm settle.
+    let _ = runner.run("partprobe", &[&dev_str]);
     runner.run("udevadm", &["settle"])?;
 
     runner.run(
@@ -111,13 +125,15 @@ pub fn install(args: &InstallArgs) -> Result<()> {
 }
 
 pub fn update_menu(args: &DeviceArgs) -> Result<()> {
-    tools::check_required("mkfs.ext4")?;
     require_root()?;
     let part_esp = disk::partition_path(&args.device, 2);
     let runner = Runner::new(args.verbose, false);
 
     let mp = mktemp("isoboot-esp")?;
-    runner.run("mount", &[&part_esp.to_string_lossy(), &mp.to_string_lossy()])?;
+    runner.run(
+        "mount",
+        &[&part_esp.to_string_lossy(), &mp.to_string_lossy()],
+    )?;
     let result = grub::write_grub_cfg(&runner, &mp);
     let _ = runner.run("umount", &[&mp.to_string_lossy()]);
     let _ = std::fs::remove_dir(&mp);
@@ -136,11 +152,21 @@ pub fn verify(args: &DeviceArgs) -> Result<()> {
     let mp_data = mktemp("isoboot-verify-data")?;
     runner.run(
         "mount",
-        &["-o", "ro", &part_esp.to_string_lossy(), &mp_esp.to_string_lossy()],
+        &[
+            "-o",
+            "ro",
+            &part_esp.to_string_lossy(),
+            &mp_esp.to_string_lossy(),
+        ],
     )?;
     runner.run(
         "mount",
-        &["-o", "ro", &part_data.to_string_lossy(), &mp_data.to_string_lossy()],
+        &[
+            "-o",
+            "ro",
+            &part_data.to_string_lossy(),
+            &mp_data.to_string_lossy(),
+        ],
     )?;
 
     let mut ok = true;
@@ -204,9 +230,18 @@ fn confirm(device: &Path) -> Result<()> {
 fn print_target_summary(dev: &disk::BlockDevice, args: &InstallArgs) {
     eprintln!("\nTarget: /dev/{}", dev.name);
     eprintln!("  size:       {}", dev.size.as_deref().unwrap_or("?"));
-    eprintln!("  model:      {}", dev.model.as_deref().unwrap_or("?").trim());
-    eprintln!("  vendor:     {}", dev.vendor.as_deref().unwrap_or("?").trim());
-    eprintln!("  serial:     {}", dev.serial.as_deref().unwrap_or("?").trim());
+    eprintln!(
+        "  model:      {}",
+        dev.model.as_deref().unwrap_or("?").trim()
+    );
+    eprintln!(
+        "  vendor:     {}",
+        dev.vendor.as_deref().unwrap_or("?").trim()
+    );
+    eprintln!(
+        "  serial:     {}",
+        dev.serial.as_deref().unwrap_or("?").trim()
+    );
     eprintln!(
         "  removable:  {}",
         dev.rm.map(|b| if b { "yes" } else { "NO" }).unwrap_or("?")
@@ -219,10 +254,7 @@ fn print_target_summary(dev: &disk::BlockDevice, args: &InstallArgs) {
 }
 
 fn unmount_existing(device: &Path, runner: &Runner) -> Result<()> {
-    let out = runner.run_capture(
-        "lsblk",
-        &["-rno", "MOUNTPOINT", &device.to_string_lossy()],
-    )?;
+    let out = runner.run_capture("lsblk", &["-rno", "MOUNTPOINT", &device.to_string_lossy()])?;
     for line in out.lines() {
         let mp = line.trim();
         if !mp.is_empty() {
@@ -234,8 +266,7 @@ fn unmount_existing(device: &Path, runner: &Runner) -> Result<()> {
 
 fn mktemp(prefix: &str) -> Result<PathBuf> {
     let path = std::env::temp_dir().join(format!("{}-{}", prefix, std::process::id()));
-    std::fs::create_dir_all(&path)
-        .with_context(|| format!("creating {}", path.display()))?;
+    std::fs::create_dir_all(&path).with_context(|| format!("creating {}", path.display()))?;
     Ok(path)
 }
 
@@ -253,10 +284,7 @@ impl<'a> TempMounts<'a> {
         let data_mp = root.join("data");
         std::fs::create_dir_all(&efi)?;
         std::fs::create_dir_all(&data_mp)?;
-        runner.run(
-            "mount",
-            &[&esp.to_string_lossy(), &efi.to_string_lossy()],
-        )?;
+        runner.run("mount", &[&esp.to_string_lossy(), &efi.to_string_lossy()])?;
         runner.run(
             "mount",
             &[&data.to_string_lossy(), &data_mp.to_string_lossy()],
